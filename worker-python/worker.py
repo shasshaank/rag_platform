@@ -22,9 +22,6 @@ print(" [i] Model loaded!")
 
 
 def ensure_collection_exists():
-    """
-    Creates the database table (Collection) if it doesn't exist.
-    """
     if not qdrant_client.collection_exists(COLLECTION_NAME):
         qdrant_client.create_collection(
             collection_name=COLLECTION_NAME,
@@ -33,9 +30,6 @@ def ensure_collection_exists():
         print(f" [i] Created collection: {COLLECTION_NAME}")
 
 def process_pdf(file_path):
-    """
-    Real RAG Logic: Read PDF -> Chunk it -> Embed it -> Store in Qdrant
-    """
     print(f" [O] Processing file: {file_path}")
 
     if not os.path.exists(file_path):
