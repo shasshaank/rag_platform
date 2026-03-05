@@ -5,10 +5,20 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from groq import Groq
 import os
 from dotenv import load_dotenv
-
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 load_dotenv()
 api_key=os.getenv("API_KEY")
 client = QdrantClient(host="localhost", port=6333)
