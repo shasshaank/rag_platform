@@ -1,3 +1,4 @@
+import sys
 import pika
 import json
 import time
@@ -21,13 +22,24 @@ embed_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 print(" [i] Model loaded!")
 
 
-def ensure_collection_exists():
-    if not qdrant_client.collection_exists(COLLECTION_NAME):
-        qdrant_client.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
-        )
-        print(f" [i] Created collection: {COLLECTION_NAME}")
+def recreate_collection():
+    """
+    Destroys the old database table and creates a fresh one.
+    This ensures you only chat with the most recently uploaded PDF.
+    """
+    print(f" [i] Resetting collection '{COLLECTION_NAME}'...")
+    
+    # 1. Delete if it exists
+    if qdrant_client.collection_exists(COLLECTION_NAME):
+        qdrant_client.delete_collection(COLLECTION_NAME)
+        print("     -> Deleted old data.")
+
+    # 2. Re-create a fresh, empty collection
+    qdrant_client.create_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
+    )
+    print(f"     -> Created fresh collection: {COLLECTION_NAME}")
 
 def process_pdf(file_path):
     print(f" [O] Processing file: {file_path}")
@@ -56,11 +68,14 @@ def process_pdf(file_path):
             payload={"text": chunk.page_content, "source": file_path}
         ))
 
-    qdrant_client.upsert(
-        collection_name=COLLECTION_NAME,
-        points=points
-    )
-    print(f" [V] Success! Stored {len(points)} vectors in Qdrant.")
+    if len(points) > 0:
+        qdrant_client.upsert(
+            collection_name=COLLECTION_NAME,
+            points=points
+        )
+        print(f" [V] Success! Stored {len(points)} vectors in Qdrant.")
+    else:
+        print(f" [X] Warning: No readable text found in {file_path}. Cannot store in database.")
 
 
 
@@ -83,7 +98,7 @@ def callback(ch, method, properties, body):
         job_id = message.get('job_id')
         
         print(f"\n [x] Received Job ID: {job_id}")
-        
+        recreate_collection()
         process_pdf(file_path)
         
         print(" [x] Done")
