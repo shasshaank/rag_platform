@@ -25,7 +25,12 @@ type JobMessage struct {
 }
 
 func main() {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	rabbitURL := os.Getenv("RABBITMQ_URL")
+	if rabbitURL == "" {
+		rabbitURL = "amqp://guest:guest@localhost:5672/"
+	}
+
+	conn, err := amqp.Dial(rabbitURL)
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
