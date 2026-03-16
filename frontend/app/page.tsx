@@ -3,13 +3,28 @@
 import { useState } from 'react';
 import { Send, FileText, Loader2, Upload } from 'lucide-react';
 
+type Citation = {
+  idx: number;
+  score?: number | null;
+  doc_id?: string | null;
+  filename?: string | null;
+  page?: number | null;
+  chunk_id?: number | null;
+  text_preview?: string | null;
+};
+
+type Message =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string; citations?: Citation[] };
+
 export default function Home() {
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [docId, setDocId] = useState<string | null>(null);
 
-  // 1. FILE UPLOAD HANDLER
+  // 1) FILE UPLOAD HANDLER
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -19,16 +34,25 @@ export default function Home() {
     formData.append('file', file);
 
     try {
-      // Connects to your GO GATEWAY
-      const res = await fetch('http://localhost:8080/upload', {
+      const gateway = process.env.NEXT_PUBLIC_GATEWAY_URL;
+      if (!gateway) {
+        alert('Missing NEXT_PUBLIC_GATEWAY_URL in environment.');
+        return;
+      }
+
+      const res = await fetch(`${gateway}/upload`, {
         method: 'POST',
         body: formData,
       });
-      
-      if (res.ok) {
-        alert('File uploaded successfully! Processing started in the background.');
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.job_id) {
+        setDocId(data.job_id);
+        setMessages([]); // optional: clear chat on new upload
+        alert(`File uploaded! doc_id = ${data.job_id}. You can start chatting.`);
       } else {
-        alert('Failed to upload file.');
+        alert(`Failed to upload file.${data?.error ? ` ${data.error}` : ''}`);
       }
     } catch (error) {
       console.error(error);
@@ -40,7 +64,7 @@ export default function Home() {
     }
   };
 
-  // 2. CHAT MESSAGE HANDLER
+  // 2) CHAT MESSAGE HANDLER
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isTyping) return;
@@ -51,22 +75,41 @@ export default function Home() {
     setIsTyping(true);
 
     try {
-      // Connects to your PYTHON FASTAPI SERVER
-      const res = await fetch('http://localhost:8000/chat', {
+      if (!docId) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: 'Please upload a PDF first (doc_id is missing).' },
+        ]);
+        return;
+      }
+
+      const chatApi = process.env.NEXT_PUBLIC_CHAT_API_URL;
+      if (!chatApi) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: 'Missing NEXT_PUBLIC_CHAT_API_URL in environment.' },
+        ]);
+        return;
+      }
+
+      const res = await fetch(`${chatApi}/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ question: userMessage }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: userMessage, doc_id: docId }),
       });
 
-      const data = await res.json();
-      
+      const data = await res.json().catch(() => ({} as any));
+
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: data.answer || data.error || 'Unknown error occurred.' },
+        {
+          role: 'assistant',
+          content: data.answer || data.error || 'Unknown error occurred.',
+          citations: Array.isArray(data.citations) ? data.citations : [],
+        },
       ]);
     } catch (error) {
+      console.error(error);
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: 'Network error. Is the Python server running?' },
@@ -76,16 +119,23 @@ export default function Home() {
     }
   };
 
-  // 3. THE UI RENDER
+  // 3) UI
   return (
     <div className="flex flex-col h-screen max-w-4xl mx-auto p-4">
       {/* Header */}
       <header className="flex items-center justify-between py-4 border-b">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FileText className="text-blue-500" />
-          DocuChat AI
-        </h1>
-        
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <FileText className="text-blue-500" />
+            DocuChat AI
+          </h1>
+          {docId && (
+            <div className="text-xs text-slate-500 mt-1">
+              Active doc_id: <span className="font-mono">{docId}</span>
+            </div>
+          )}
+        </div>
+
         {/* Upload Button */}
         <div>
           <input
@@ -98,9 +148,15 @@ export default function Home() {
           />
           <label
             htmlFor="file-upload"
-            className={`flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors ${
+              isUploading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
-            {isUploading ? <Loader2 className="animate-spin w-4 h-4" /> : <Upload className="w-4 h-4" />}
+            {isUploading ? (
+              <Loader2 className="animate-spin w-4 h-4" />
+            ) : (
+              <Upload className="w-4 h-4" />
+            )}
             {isUploading ? 'Uploading...' : 'Upload PDF'}
           </label>
         </div>
@@ -125,20 +181,37 @@ export default function Home() {
                     : 'bg-white border text-slate-800 shadow-sm'
                 }`}
               >
-                {msg.content}
+                <div>{msg.content}</div>
+
+                {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-600 space-y-2">
+                    <div className="font-semibold">Sources</div>
+
+                    {msg.citations.map((c) => (
+                      <div key={c.idx} className="bg-slate-50 rounded-md p-2">
+                        <div>
+                          <span className="font-medium">[{c.idx}]</span>{' '}
+                          {c.filename ?? 'unknown'} {c.page != null ? `(page ${c.page})` : ''}{' '}
+                          {c.chunk_id != null ? `chunk ${c.chunk_id}` : ''}
+                        </div>
+                        {c.text_preview && <div className="mt-1">{c.text_preview}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))
         )}
-        
+
         {isTyping && (
-           <div className="flex justify-start">
-             <div className="bg-white border text-slate-500 shadow-sm rounded-2xl px-5 py-3 flex gap-1">
-               <span className="animate-bounce">.</span>
-               <span className="animate-bounce delay-100">.</span>
-               <span className="animate-bounce delay-200">.</span>
-             </div>
-           </div>
+          <div className="flex justify-start">
+            <div className="bg-white border text-slate-500 shadow-sm rounded-2xl px-5 py-3 flex gap-1">
+              <span className="animate-bounce">.</span>
+              <span className="animate-bounce delay-100">.</span>
+              <span className="animate-bounce delay-200">.</span>
+            </div>
+          </div>
         )}
       </main>
 
