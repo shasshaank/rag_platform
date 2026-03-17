@@ -18,10 +18,10 @@ export function MessageBubble({ msg }: { msg: Message }) {
     <div className={cx('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cx(
-          'max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
+          'max-w-[90%] md:max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm',
           isUser
-            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
-            : 'bg-white border border-slate-200 text-slate-900 shadow-sm'
+            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+            : 'bg-white border border-slate-200 text-slate-900'
         )}
       >
         <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -30,7 +30,7 @@ export function MessageBubble({ msg }: { msg: Message }) {
           <div className="mt-3 pt-3 border-t border-slate-200">
             <button
               type="button"
-              className="text-xs font-medium text-slate-700 inline-flex items-center gap-1 hover:underline"
+              className="text-xs font-medium text-slate-700 inline-flex items-center gap-1 hover:text-slate-900"
               onClick={() => setOpen((v) => !v)}
             >
               {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -40,7 +40,7 @@ export function MessageBubble({ msg }: { msg: Message }) {
             {open && (
               <div className="mt-2 space-y-2">
                 {(msg.citations || []).map((c) => (
-                  <div key={c.idx} className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2">
+                  <div key={c.idx} className="text-xs bg-slate-50 border border-slate-200 rounded-xl p-2.5">
                     <div className="text-slate-700">
                       <span className="font-semibold">[{c.idx}]</span>{' '}
                       <span className="font-medium">{c.filename ?? 'unknown'}</span>{' '}
@@ -52,7 +52,7 @@ export function MessageBubble({ msg }: { msg: Message }) {
                     </div>
 
                     {c.text_preview && (
-                      <div className="mt-1 text-slate-600 whitespace-pre-wrap">{c.text_preview}</div>
+                      <div className="mt-1.5 text-slate-600 whitespace-pre-wrap">{c.text_preview}</div>
                     )}
                   </div>
                 ))}
