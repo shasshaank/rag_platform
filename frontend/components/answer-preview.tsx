@@ -1,14 +1,15 @@
 import { FileText, ExternalLink, ThumbsUp, ThumbsDown, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { Message } from "@/lib/types";
 
 interface AnswerCardProps {
   query: string;
   answer: string;
-  sources: { name: string; page?: number }[];
-  timestamp: string;
+  sources?: any[];
+  timestamp?: string;
 }
 
-function AnswerCard({ query, answer, sources, timestamp }: AnswerCardProps) {
+function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps) {
   return (
     <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-start justify-between gap-4">
@@ -28,23 +29,25 @@ function AnswerCard({ query, answer, sources, timestamp }: AnswerCardProps) {
         <p className="text-sm text-foreground leading-relaxed">{answer}</p>
       </div>
 
-      <div className="mb-4">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
-          Sources
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {sources.map((source, index) => (
-            <span
-              key={index}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-xs font-medium text-secondary-foreground"
-            >
-              <FileText className="h-3 w-3" aria-hidden="true" />
-              {source.name}
-              {source.page && <span className="text-muted-foreground">p.{source.page}</span>}
-            </span>
-          ))}
+      {sources && sources.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
+            Sources
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {sources.map((source: any, index: number) => (
+              <span
+                key={index}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-xs font-medium text-secondary-foreground"
+              >
+                <FileText className="h-3 w-3" aria-hidden="true" />
+                {typeof source === 'string' ? source : (source.name || 'document')}
+                {source.page && <span className="text-muted-foreground">p.{source.page}</span>}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex items-center justify-between pt-3 border-t border-border">
         <div className="flex items-center gap-1">
@@ -88,27 +91,23 @@ function AnswerCard({ query, answer, sources, timestamp }: AnswerCardProps) {
   );
 }
 
-const sampleAnswers: AnswerCardProps[] = [
-  {
-    query: "What are the Q4 revenue projections?",
-    answer:
-      "Based on the Q4 report, projected revenue is $4.2M with a 15% growth rate compared to Q3. The primary growth drivers are the enterprise segment and new product launches planned for November.",
-    sources: [
-      { name: "q4-report.docx", page: 12 },
-      { name: "financial-summary.pdf", page: 3 },
-    ],
-    timestamp: "5 min ago",
-  },
-  {
-    query: "What is the company's remote work policy?",
-    answer:
-      "The company follows a hybrid work model where employees can work remotely up to 3 days per week. All remote work must be coordinated with team leads, and core collaboration hours are 10am-3pm in the employee's local timezone.",
-    sources: [{ name: "company-handbook.pdf", page: 24 }],
-    timestamp: "12 min ago",
-  },
-];
+export function AnswerPreview({ messages }: { messages: Message[] }) {
+  const pairs = [];
+  for (let i = 0; i < messages.length - 1; i++) {
+    if (messages[i].role === "user" && messages[i + 1].role === "assistant") {
+      pairs.push({
+        query: messages[i].content,
+        answer: messages[i + 1].content,
+        sources: (messages[i + 1] as any).citations || [],
+      });
+    }
+  }
 
-export function AnswerPreview() {
+  if (pairs.length === 0) return null;
+
+  // Reverse so newest is first
+  pairs.reverse();
+
   return (
     <section className="mt-8">
       <div className="mb-5 flex items-center justify-between">
@@ -118,18 +117,17 @@ export function AnswerPreview() {
             Previously generated responses from your queries
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-primary hover:text-primary/80 hover:bg-primary/10"
-        >
-          View History
-        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {sampleAnswers.map((answer, index) => (
-          <AnswerCard key={index} {...answer} />
+        {pairs.map((pair, index) => (
+          <AnswerCard 
+            key={index} 
+            query={pair.query} 
+            answer={pair.answer} 
+            sources={pair.sources} 
+            timestamp="Just now" 
+          />
         ))}
       </div>
     </section>

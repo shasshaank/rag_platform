@@ -14,3 +14,5 @@ __pycache__/
 *.pyc
 venv/
 .env
+
+windows_setup_guide.md

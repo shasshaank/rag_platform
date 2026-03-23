@@ -58,7 +58,7 @@ export default function DashboardPage() {
             </aside>
           </div>
 
-          <AnswerPreview />
+          <AnswerPreview messages={messages} />
         </div>
       </main>
 

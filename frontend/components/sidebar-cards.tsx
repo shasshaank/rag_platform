@@ -1,17 +1,8 @@
 import { Activity, Database, Clock, ArrowUpRight } from "lucide-react";
 
-const activityItems = [
-  { action: "Document indexed", detail: "company-handbook.pdf", time: "2 min ago" },
-  { action: "Query completed", detail: "Revenue analysis", time: "5 min ago" },
-  { action: "Index updated", detail: "Q4 Reports", time: "12 min ago" },
-  { action: "New document", detail: "meeting-notes.txt", time: "1 hr ago" },
-];
+const activityItems: { action: string; detail: string; time: string }[] = [];
 
-const recentQueries = [
-  { query: "What are the Q4 revenue projections?", count: 3 },
-  { query: "Summarize the employee handbook", count: 7 },
-  { query: "Key highlights from meeting notes", count: 2 },
-];
+const recentQueries: { query: string; count: number }[] = [];
 
 export function ActivityFeed() {
   return (
@@ -25,24 +16,28 @@ export function ActivityFeed() {
           View all
         </button>
       </div>
-      <ul className="space-y-3" aria-label="Recent activity">
-        {activityItems.map((item, index) => (
-          <li key={index} className="flex items-start gap-3">
-            <div className="mt-0.5 h-2 w-2 rounded-full bg-primary/60" aria-hidden="true" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">{item.action}</p>
-              <p className="truncate text-xs text-muted-foreground">{item.detail}</p>
-            </div>
-            <span className="shrink-0 text-xs text-muted-foreground">{item.time}</span>
-          </li>
-        ))}
-      </ul>
+      {activityItems.length > 0 ? (
+        <ul className="space-y-3" aria-label="Recent activity">
+          {activityItems.map((item, index) => (
+            <li key={index} className="flex items-start gap-3">
+              <div className="mt-0.5 h-2 w-2 rounded-full bg-primary/60" aria-hidden="true" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground">{item.action}</p>
+                <p className="truncate text-xs text-muted-foreground">{item.detail}</p>
+              </div>
+              <span className="shrink-0 text-xs text-muted-foreground">{item.time}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground text-center py-4">No recent activity.</p>
+      )}
     </div>
   );
 }
 
 export function IndexUsage() {
-  const usagePercent = 42;
+  const usagePercent = 0;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -72,11 +67,11 @@ export function IndexUsage() {
         </div>
         <div className="grid grid-cols-2 gap-3 text-center">
           <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-lg font-semibold text-foreground">24</p>
+            <p className="text-lg font-semibold text-foreground">0</p>
             <p className="text-xs text-muted-foreground">Documents</p>
           </div>
           <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-lg font-semibold text-foreground">1.2K</p>
+            <p className="text-lg font-semibold text-foreground">0</p>
             <p className="text-xs text-muted-foreground">Vectors</p>
           </div>
         </div>
@@ -92,21 +87,25 @@ export function RecentQueries() {
         <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
         <h3 className="text-base font-semibold text-foreground">Recent Queries</h3>
       </div>
-      <ul className="space-y-2" aria-label="Recent queries">
-        {recentQueries.map((item, index) => (
-          <li key={index}>
-            <button className="w-full flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 group">
-              <span className="text-sm text-foreground truncate pr-2">{item.query}</span>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                  {item.count}x
-                </span>
-                <ArrowUpRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {recentQueries.length > 0 ? (
+        <ul className="space-y-2" aria-label="Recent queries">
+          {recentQueries.map((item, index) => (
+            <li key={index}>
+              <button className="w-full flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 group">
+                <span className="text-sm text-foreground truncate pr-2">{item.query}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    {item.count}x
+                  </span>
+                  <ArrowUpRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground text-center py-4">No recent queries.</p>
+      )}
     </div>
   );
 }
