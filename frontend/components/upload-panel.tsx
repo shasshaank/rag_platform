@@ -3,19 +3,21 @@
 import { useRef, useState } from "react";
 import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { getPublicEnv } from "@/lib/env";
 
 type Props = {
-  docId: string | null;
+  documents: { id: string; name: string }[];
+  selectedDocIds: string[];
   onDocUploaded: (docId: string, filename: string) => void;
+  onToggleSelection: (docId: string) => void;
 };
 
-export function UploadPanel({ docId, onDocUploaded }: Props) {
+export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggleSelection }: Props) {
   const { gateway } = getPublicEnv();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [isUploading, setIsUploading] = useState(false);
-  const [recentFiles, setRecentFiles] = useState<string[]>([]);
 
   const uploadFile = async (file: File) => {
     if (!gateway) {
@@ -37,7 +39,6 @@ export function UploadPanel({ docId, onDocUploaded }: Props) {
 
       if (res.ok && data?.job_id) {
         onDocUploaded(data.job_id, file.name);
-        setRecentFiles((prev) => [file.name, ...prev.filter((f) => f !== file.name)].slice(0, 5));
       } else {
         alert(`Failed to upload file.${data?.error ? ` ${data.error}` : ""}`);
       }
@@ -103,27 +104,34 @@ export function UploadPanel({ docId, onDocUploaded }: Props) {
       <div className="mt-4 space-y-2">
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Indexed Files</p>
 
-        {docId ? (
-          <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2.5">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">Current document loaded</p>
-              <p className="text-xs text-muted-foreground font-mono">{docId}</p>
-            </div>
-          </div>
-        ) : (
+        {documents.length === 0 ? (
           <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
             <AlertCircle className="h-4 w-4" />
-            No document uploaded yet
+            No documents uploaded yet
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {documents.map((doc) => {
+              const checked = selectedDocIds.includes(doc.id);
+              return (
+                <div key={doc.id} className="flex items-start gap-3 rounded-lg bg-muted/40 px-3 py-2.5">
+                  <Checkbox 
+                    id={`doc-${doc.id}`}
+                    checked={checked} 
+                    onCheckedChange={() => onToggleSelection(doc.id)}
+                    className="mt-0.5 w-4 h-4"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <label htmlFor={`doc-${doc.id}`} className="truncate text-sm font-medium text-foreground leading-none mb-1 cursor-pointer select-none line-clamp-1 block">
+                      {doc.name}
+                    </label>
+                    <p className="text-xs text-muted-foreground font-mono truncate">{doc.id}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-
-        {recentFiles.map((name) => (
-          <div key={name} className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <p className="truncate text-sm text-foreground">{name}</p>
-          </div>
-        ))}
       </div>
 
       <Button

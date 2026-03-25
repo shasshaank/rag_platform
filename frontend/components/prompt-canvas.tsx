@@ -7,11 +7,11 @@ import { getPublicEnv } from "@/lib/env";
 import type { Message } from "@/lib/types";
 
 type Props = {
-  docId: string | null;
+  selectedDocIds: string[];
   onAnswered: (userMessage: Message, assistantMessage: Message) => void;
 };
 
-export function PromptCanvas({ docId, onAnswered }: Props) {
+export function PromptCanvas({ selectedDocIds, onAnswered }: Props) {
   const { chatApi } = getPublicEnv();
   const [prompt, setPrompt] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -27,10 +27,10 @@ export function PromptCanvas({ docId, onAnswered }: Props) {
     const userMessage: Message = { role: "user", content: userText };
 
     try {
-      if (!docId) {
+      if (selectedDocIds.length === 0) {
         const assistantMessage: Message = {
           role: "assistant",
-          content: "Upload a PDF first, then ask questions.",
+          content: "Select at least one document first, then ask questions.",
         };
         onAnswered(userMessage, assistantMessage);
         return;
@@ -48,7 +48,7 @@ export function PromptCanvas({ docId, onAnswered }: Props) {
       const res = await fetch(`${chatApi}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userText, doc_id: docId }),
+        body: JSON.stringify({ question: userText, doc_ids: selectedDocIds }),
       });
 
       const data = await res.json().catch(() => ({} as any));
@@ -79,8 +79,8 @@ export function PromptCanvas({ docId, onAnswered }: Props) {
           <p className="text-sm text-muted-foreground">Ask questions about your indexed documents</p>
         </div>
         <div className="flex items-center gap-2 rounded-full bg-secondary/50 px-3 py-1.5 text-xs font-medium text-secondary-foreground">
-          <span className="h-2 w-2 rounded-full bg-green-500" />
-          <span>{docId ? "Document loaded" : "No document"}</span>
+          <span className={`h-2 w-2 rounded-full ${selectedDocIds.length > 0 ? 'bg-green-500' : 'bg-muted-foreground'}`} />
+          <span>{selectedDocIds.length > 0 ? `${selectedDocIds.length} document(s)` : "No documents"}</span>
         </div>
       </div>
 
@@ -88,7 +88,7 @@ export function PromptCanvas({ docId, onAnswered }: Props) {
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder={docId ? "Ask a question about the uploaded PDF..." : "Upload a PDF first..."}
+          placeholder={selectedDocIds.length > 0 ? "Ask a question about the selected documents..." : "Select at least one document..."}
           className="h-full min-h-[220px] lg:min-h-[280px] w-full resize-none rounded-xl border border-border bg-muted/30 p-4 text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
         />
 

@@ -10,7 +10,8 @@ import { Footer } from "@/components/footer";
 import type { Message } from "@/lib/types";
 
 export default function DashboardPage() {
-  const [docId, setDocId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<{ id: string; name: string }[]>([]);
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
   return (
@@ -26,9 +27,9 @@ export default function DashboardPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               Query your documents and manage your knowledge index
             </p>
-            {docId && (
+            {selectedDocIds.length > 0 && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Active doc_id: <span className="font-mono">{docId}</span>
+                Active docs: <span className="font-mono">{selectedDocIds.length} selected</span>
               </p>
             )}
           </div>
@@ -36,17 +37,26 @@ export default function DashboardPage() {
           <div className="grid gap-6 lg:grid-cols-12">
             <div className="lg:col-span-5 xl:col-span-6">
               <PromptCanvas
-                docId={docId}
+                selectedDocIds={selectedDocIds}
                 onAnswered={(u, a) => setMessages((prev) => [...prev, u, a])}
               />
             </div>
 
             <div className="lg:col-span-4 xl:col-span-3">
               <UploadPanel
-                docId={docId}
-                onDocUploaded={(id) => {
-                  setDocId(id);
+                documents={documents}
+                selectedDocIds={selectedDocIds}
+                onDocUploaded={(id, name) => {
+                  setDocuments((prev) => [{ id, name }, ...prev]);
+                  if (!selectedDocIds.includes(id)) {
+                    setSelectedDocIds((prev) => [...prev, id]);
+                  }
                   setMessages([]);
+                }}
+                onToggleSelection={(id) => {
+                  setSelectedDocIds((prev) =>
+                    prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
+                  );
                 }}
               />
             </div>

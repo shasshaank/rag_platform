@@ -36,11 +36,11 @@ print("Model loaded!")
 
 class QueryRequest(BaseModel):
     question: str
-    doc_id:str
+    doc_ids: list[str]
 
 @app.post("/chat")
 def chat_with_pdf(req: QueryRequest):
-    print(f"Received question: {req.question} (doc_id={req.doc_id})")
+    print(f"Received question: {req.question} (doc_ids={req.doc_ids})")
 
     try:
         vector_math = embeddings.embed_query(req.question)
@@ -49,10 +49,10 @@ def chat_with_pdf(req: QueryRequest):
             must=[
                 models.FieldCondition(
                     key="doc_id",
-                    match=models.MatchValue(value=req.doc_id),
+                    match=models.MatchAny(any=req.doc_ids),
                 )
             ]
-        )
+        ) if req.doc_ids else None
 
         search_result = client.query_points(
             collection_name=collection_name,
@@ -116,7 +116,7 @@ def chat_with_pdf(req: QueryRequest):
             "answer": final_answer,
             "citations": citations,
             "retrieval_count":len(citations),
-            "doc_id":req.doc_id,
+            "doc_ids":req.doc_ids,
         }
 
     except Exception as e:
