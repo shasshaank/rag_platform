@@ -38,6 +38,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-5 xl:col-span-6">
               <PromptCanvas
                 selectedDocIds={selectedDocIds}
+                messages={messages}
                 onAnswered={(u, a) => setMessages((prev) => [...prev, u, a])}
               />
             </div>
@@ -57,6 +58,10 @@ export default function DashboardPage() {
                   setSelectedDocIds((prev) =>
                     prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
                   );
+                }}
+                onDocDeleted={(id) => {
+                  setDocuments((prev) => prev.filter((d) => d.id !== id));
+                  setSelectedDocIds((prev) => prev.filter((d) => d !== id));
                 }}
               />
             </div>
