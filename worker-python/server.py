@@ -37,6 +37,7 @@ print("Model loaded!")
 class QueryRequest(BaseModel):
     question: str
     doc_ids: list[str]
+    chat_history: list[dict] = []
 
 @app.post("/chat")
 def chat_with_pdf(req: QueryRequest):
@@ -81,6 +82,7 @@ def chat_with_pdf(req: QueryRequest):
                 "page": payload.get("page"),
                 "chunk_id": payload.get("chunk_id"),
                 "text_preview": (text[:240] + "...") if text else "",
+                "text": text,
             })
 
         # IMPORTANT: handle empty retrieval so we never return None
@@ -92,21 +94,29 @@ def chat_with_pdf(req: QueryRequest):
 
         context_text = "\n\n".join(context_blocks)
 
-        prompt = f"""
-        You are an assistant that answers ONLY using the provided context.
-        If the answer isn't supported by the context, say: "I don't know based on the provided documents."
+        prompt_messages = [
+            {
+                "role": "system",
+                "content": f"""
+You are an assistant that answers ONLY using the provided context.
+If the answer isn't supported by the context, say: "I don't know based on the provided documents."
+When you use information, cite sources like [1] or [2].
 
-        When you use information, cite sources like [1] or [2].
+CONTEXT:
+{context_text}
+"""
+            }
+        ]
 
-        CONTEXT:
-        {context_text}
+        # Append previous chat history
+        for msg in req.chat_history[-6:]:  # Keep last 6 messages
+            prompt_messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
 
-        QUESTION:
-        {req.question}
-        """
+        # Append the current prompt
+        prompt_messages.append({"role": "user", "content": req.question})
 
         chat_completion = groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
+            messages=prompt_messages,
             model="llama-3.3-70b-versatile",
         )
 
@@ -121,5 +131,27 @@ def chat_with_pdf(req: QueryRequest):
 
     except Exception as e:
         print(f"ERROR: {e}")
+        return {"error": str(e)}
+
+@app.delete("/document/{doc_id}")
+def delete_document(doc_id: str):
+    print(f"Deleting document vectors for doc_id: {doc_id}")
+    try:
+        client.delete(
+            collection_name=collection_name,
+            points_selector=models.FilterSelector(
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="doc_id",
+                            match=models.MatchValue(value=doc_id),
+                        )
+                    ]
+                )
+            )
+        )
+        return {"status": "success"}
+    except Exception as e:
+        print(f"ERROR deleting document {doc_id}: {e}")
         return {"error": str(e)}
 

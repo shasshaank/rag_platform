@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPublicEnv } from "@/lib/env";
@@ -11,13 +11,15 @@ type Props = {
   selectedDocIds: string[];
   onDocUploaded: (docId: string, filename: string) => void;
   onToggleSelection: (docId: string) => void;
+  onDocDeleted: (docId: string) => void;
 };
 
-export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggleSelection }: Props) {
-  const { gateway } = getPublicEnv();
+export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggleSelection, onDocDeleted }: Props) {
+  const { gateway, chatApi } = getPublicEnv();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [isUploading, setIsUploading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const uploadFile = async (file: File) => {
     if (!gateway) {
@@ -47,6 +49,27 @@ export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggle
       alert("Upload failed. Is the gateway server running?");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const deleteDocument = async (id: string) => {
+    if (!chatApi) {
+      alert("Missing NEXT_PUBLIC_CHAT_API_URL in environment.");
+      return;
+    }
+    setIsDeleting(id);
+    try {
+      const res = await fetch(`${chatApi}/document/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        onDocDeleted(id);
+      } else {
+        alert("Failed to delete document.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error deleting document.");
+    } finally {
+      setIsDeleting(null);
     }
   };
 
@@ -114,7 +137,7 @@ export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggle
             {documents.map((doc) => {
               const checked = selectedDocIds.includes(doc.id);
               return (
-                <div key={doc.id} className="flex items-start gap-3 rounded-lg bg-muted/40 px-3 py-2.5">
+                <div key={doc.id} className="group relative flex items-start gap-3 rounded-lg bg-muted/40 px-3 py-2.5 pr-10 hover:bg-muted/60 transition-colors">
                   <Checkbox 
                     id={`doc-${doc.id}`}
                     checked={checked} 
@@ -127,6 +150,15 @@ export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggle
                     </label>
                     <p className="text-xs text-muted-foreground font-mono truncate">{doc.id}</p>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1.5 h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
+                    onClick={() => deleteDocument(doc.id)}
+                    disabled={isDeleting === doc.id}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               );
             })}

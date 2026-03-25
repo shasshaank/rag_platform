@@ -8,10 +8,11 @@ import type { Message } from "@/lib/types";
 
 type Props = {
   selectedDocIds: string[];
+  messages: Message[];
   onAnswered: (userMessage: Message, assistantMessage: Message) => void;
 };
 
-export function PromptCanvas({ selectedDocIds, onAnswered }: Props) {
+export function PromptCanvas({ selectedDocIds, messages, onAnswered }: Props) {
   const { chatApi } = getPublicEnv();
   const [prompt, setPrompt] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -45,10 +46,12 @@ export function PromptCanvas({ selectedDocIds, onAnswered }: Props) {
         return;
       }
 
+      const chatHistory = messages.map(m => ({ role: m.role, content: m.content }));
+
       const res = await fetch(`${chatApi}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userText, doc_ids: selectedDocIds }),
+        body: JSON.stringify({ question: userText, doc_ids: selectedDocIds, chat_history: chatHistory }),
       });
 
       const data = await res.json().catch(() => ({} as any));

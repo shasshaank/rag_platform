@@ -1,5 +1,9 @@
+"use client";
+
+import { useState } from "react";
 import { FileText, ExternalLink, ThumbsUp, ThumbsDown, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Message } from "@/lib/types";
 
 interface AnswerCardProps {
@@ -10,6 +14,8 @@ interface AnswerCardProps {
 }
 
 function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps) {
+  const [selectedSource, setSelectedSource] = useState<any | null>(null);
+
   return (
     <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-start justify-between gap-4">
@@ -36,14 +42,16 @@ function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps)
           </p>
           <div className="flex flex-wrap gap-2">
             {sources.map((source: any, index: number) => (
-              <span
+              <button
                 key={index}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-xs font-medium text-secondary-foreground"
+                onClick={() => setSelectedSource(source)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary transition-colors"
+                title="View document citation"
               >
                 <FileText className="h-3 w-3" aria-hidden="true" />
-                {typeof source === 'string' ? source : (source.name || 'document')}
+                {typeof source === 'string' ? source : (source.filename || source.name || 'document')}
                 {source.page && <span className="text-muted-foreground">p.{source.page}</span>}
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -87,6 +95,21 @@ function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps)
           </Button>
         </div>
       </div>
+
+      <Dialog open={!!selectedSource} onOpenChange={(open) => !open && setSelectedSource(null)}>
+        <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto w-[90vw] sm:w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {selectedSource?.filename || selectedSource?.name || 'Document Citation'}
+              {selectedSource?.page && <span className="text-muted-foreground text-sm font-normal"> - Page {selectedSource.page}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 rounded-md bg-muted/50 p-4 text-sm leading-relaxed text-foreground whitespace-pre-wrap border font-serif">
+            {selectedSource?.text || selectedSource?.text_preview || "No text available."}
+          </div>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }
