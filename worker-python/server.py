@@ -85,22 +85,20 @@ def chat_with_pdf(req: QueryRequest):
                 "text": text,
             })
 
-        # IMPORTANT: handle empty retrieval so we never return None
+        # IMPORTANT: handle empty retrieval so the LLM can fallback to general knowledge
         if not context_blocks:
-            return {
-                "answer": "I don't know based on the provided documents.",
-                "citations": [],
-            }
-
-        context_text = "\n\n".join(context_blocks)
+            context_text = "No relevant documents found."
+        else:
+            context_text = "\n\n".join(context_blocks)
 
         prompt_messages = [
             {
                 "role": "system",
                 "content": f"""
-You are an assistant that answers ONLY using the provided context.
-If the answer isn't supported by the context, say: "I don't know based on the provided documents."
-When you use information, cite sources like [1] or [2].
+You are an intelligent assistant. You have been provided with some CONTEXT from documents.
+First, try to answer the user's question using the provided CONTEXT.
+If you use information from the CONTEXT, you MUST cite your sources like [1] or [2].
+If the answer is NOT supported by the CONTEXT, or if no CONTEXT is provided, explicitly state that the documents don't contain the answer, and then provide an answer based on your general knowledge.
 
 CONTEXT:
 {context_text}
