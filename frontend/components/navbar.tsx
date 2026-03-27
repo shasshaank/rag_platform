@@ -5,13 +5,7 @@ import Link from "next/link";
 import { Menu, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const navLinks = [
-  { name: "Dashboard", href: "#" },
-  { name: "Documents", href: "#" },
-  { name: "Indexes", href: "#" },
-  { name: "API", href: "#" },
-  { name: "Docs", href: "#" },
-];
+const navLinks: { name: string; href: string }[] = [];
 
 export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -31,15 +25,6 @@ export function Navbar() {
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex md:items-center md:gap-1">
-          {navLinks.map((link) => (
-            <Link
-              key={link.name}
-              href={link.href}
-              className="rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {link.name}
-            </Link>
-          ))}
         </div>
 
         {/* Auth Buttons */}
@@ -72,16 +57,6 @@ export function Navbar() {
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-border/60 bg-card">
           <div className="space-y-1 px-4 py-3">
-            {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                href={link.href}
-                className="block rounded-lg px-3 py-2.5 text-base font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                {link.name}
-              </Link>
-            ))}
           </div>
           <div className="border-t border-border/60 px-4 py-4 flex flex-col gap-2">
             <Button variant="ghost" className="w-full justify-center text-muted-foreground">
