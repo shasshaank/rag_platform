@@ -70,6 +70,7 @@ export function PromptCanvas({ selectedDocIds, messages, onAnswered, hasProcessi
         role: "assistant",
         content: data.answer || data.error || "Unknown error occurred.",
         citations: Array.isArray(data.citations) ? data.citations : [],
+        source_type: data.source_type || "document",
       };
 
       onAnswered(userMessage, assistantMessage);

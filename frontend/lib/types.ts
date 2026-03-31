@@ -14,6 +14,7 @@ export type Citation = {
     role: "assistant";
     content: string;
     citations?: Citation[];
+    source_type?: "document" | "general_knowledge";
   };
   
   export type Message = UserMessage | AssistantMessage;

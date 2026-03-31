@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, ExternalLink, ThumbsUp, ThumbsDown, Copy } from "lucide-react";
+import { FileText, ExternalLink, ThumbsUp, ThumbsDown, Copy, AlertTriangle, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Message } from "@/lib/types";
@@ -10,14 +10,17 @@ interface AnswerCardProps {
   query: string;
   answer: string;
   sources?: any[];
+  source_type?: "document" | "general_knowledge";
   timestamp?: string;
 }
 
-function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps) {
+function AnswerCard({ query, answer, sources = [], source_type, timestamp }: AnswerCardProps) {
   const [selectedSource, setSelectedSource] = useState<any | null>(null);
   const [isLiked, setIsLiked] = useState<boolean | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const isGeneralKnowledge = source_type === "general_knowledge" || sources.length === 0;
 
   return (
     <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -38,7 +41,12 @@ function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps)
         <p className="text-sm text-foreground leading-relaxed">{answer}</p>
       </div>
 
-      {sources && sources.length > 0 && (
+      {isGeneralKnowledge ? (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>This answer is based on general knowledge, not your uploaded documents.</span>
+        </div>
+      ) : (
         <div className="mb-4">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
             Sources
@@ -82,6 +90,12 @@ function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps)
           </Button>
         </div>
         <div className="flex items-center gap-1">
+          {!isGeneralKnowledge && (
+            <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 mr-2">
+              <BookOpen className="h-3 w-3" />
+              Document-grounded
+            </span>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -143,10 +157,12 @@ export function AnswerPreview({ messages }: { messages: Message[] }) {
   const pairs = [];
   for (let i = 0; i < messages.length - 1; i++) {
     if (messages[i].role === "user" && messages[i + 1].role === "assistant") {
+      const assistantMsg = messages[i + 1] as any;
       pairs.push({
         query: messages[i].content,
-        answer: messages[i + 1].content,
-        sources: (messages[i + 1] as any).citations || [],
+        answer: assistantMsg.content,
+        sources: assistantMsg.citations || [],
+        source_type: assistantMsg.source_type,
       });
     }
   }
@@ -173,7 +189,8 @@ export function AnswerPreview({ messages }: { messages: Message[] }) {
             key={index} 
             query={pair.query} 
             answer={pair.answer} 
-            sources={pair.sources} 
+            sources={pair.sources}
+            source_type={pair.source_type}
             timestamp="Just now" 
           />
         ))}
