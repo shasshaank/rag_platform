@@ -5,6 +5,7 @@ from qdrant_client.http import models
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from groq import Groq
 import os
+import re
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -121,10 +122,14 @@ def chat_with_pdf(req: QueryRequest):
             {
                 "role": "system",
                 "content": f"""
-You are an intelligent assistant. You have been provided with some CONTEXT from documents.
-First, try to answer the user's question using the provided CONTEXT.
-If you use information from the CONTEXT, you MUST cite your sources like [1] or [2].
-If the answer is NOT supported by the CONTEXT, or if no CONTEXT is provided, explicitly state that the documents don't contain the answer, and then provide an answer based on your general knowledge.
+You are an intelligent assistant. You have been provided with CONTEXT retrieved from the user's uploaded documents.
+
+RULES:
+1. If the CONTEXT contains information relevant to the user's question, answer USING ONLY that information and cite your sources like [1], [2], etc.
+2. If the CONTEXT does NOT contain relevant information, or if no CONTEXT is provided, you MAY answer from your general knowledge BUT you MUST start your response with exactly this line:
+   "⚠️ This answer is based on general knowledge, not your uploaded documents."
+   Then provide your answer below that disclaimer.
+3. Do NOT mix document citations with general knowledge. Either cite documents OR give the disclaimer — never both.
 
 CONTEXT:
 {context_text}
@@ -150,13 +155,25 @@ CONTEXT:
         final_answer = chat_completion.choices[0].message.content
         print(f"[DEBUG] LLM response length: {len(final_answer)} chars")
         print(f"[DEBUG] LLM response preview: {final_answer[:200]}")
+
+        # Determine which citations the LLM actually used in its answer
+        used_indices = set(int(m) for m in re.findall(r'\[(\d+)\]', final_answer))
+        used_citations = [c for c in citations if c["idx"] in used_indices]
+        
+        # Determine source type
+        is_general_knowledge = len(used_citations) == 0
+        source_type = "general_knowledge" if is_general_knowledge else "document"
+        
+        print(f"[DEBUG] Used citation indices: {used_indices}")
+        print(f"[DEBUG] Source type: {source_type}")
         print(f"{'='*60}\n")
 
         return {
             "answer": final_answer,
-            "citations": citations,
-            "retrieval_count":len(citations),
-            "doc_ids":req.doc_ids,
+            "citations": used_citations,
+            "retrieval_count": len(used_citations),
+            "source_type": source_type,
+            "doc_ids": req.doc_ids,
         }
 
     except Exception as e:
