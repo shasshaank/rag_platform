@@ -4,6 +4,7 @@ import json
 import time
 import os
 import uuid
+import traceback
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from langchain_community.document_loaders import PyPDFLoader
@@ -54,10 +55,18 @@ def process_pdf(file_path: str, job_id: str) -> str:
 
     points = []
     for i, chunk in enumerate(chunks):
-        vector = embed_model.embed_query(chunk.page_content)
+        text = chunk.page_content if chunk.page_content else ""
+        if not isinstance(text, str):
+            text = str(text)
+        text = text.strip()
+        
+        if not text:
+            continue  # Skip empty chunks to avoid embedding errors
+
+        vector = embed_model.embed_query(text)
 
         payload = {
-            "text": chunk.page_content,
+            "text": text,
             "source": file_path,
             "filename": filename,
             "doc_id": doc_id,
@@ -76,7 +85,12 @@ def process_pdf(file_path: str, job_id: str) -> str:
     if not points:
         raise ValueError(f"No readable text found in {file_path}. Cannot store in database.")
 
-    qdrant_client.upsert(collection_name=COLLECTION_NAME, points=points)
+    batch_size = 100
+    for i in range(0, len(points), batch_size):
+        qdrant_client.upsert(
+            collection_name=COLLECTION_NAME, 
+            points=points[i:i+batch_size]
+        )
     print(f" [V] Success! Stored {len(points)} vectors in Qdrant for doc_id={doc_id}.")
     return doc_id
 
@@ -109,6 +123,11 @@ def callback(ch, method, properties, body):
         
     except Exception as e:
         print(f"Error processing message: {e}")
+        traceback.print_exc()
+        try:
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        except Exception as nack_err:
+            print(f"Failed to nack message: {nack_err}")
 
 def main():
     print(" [*] Worker started. Connecting to RabbitMQ...")

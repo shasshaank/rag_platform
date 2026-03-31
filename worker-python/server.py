@@ -41,19 +41,38 @@ class QueryRequest(BaseModel):
 
 @app.post("/chat")
 def chat_with_pdf(req: QueryRequest):
-    print(f"Received question: {req.question} (doc_ids={req.doc_ids})")
+    print(f"\n{'='*60}")
+    print(f"[DEBUG] Received question: {req.question}")
+    print(f"[DEBUG] doc_ids from frontend: {req.doc_ids}")
+    print(f"[DEBUG] doc_ids types: {[type(d).__name__ for d in req.doc_ids]}")
+    print(f"[DEBUG] chat_history length: {len(req.chat_history)}")
 
     try:
         vector_math = embeddings.embed_query(req.question)
 
-        filter_ = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="doc_id",
-                    match=models.MatchAny(any=req.doc_ids),
-                )
-            ]
-        ) if req.doc_ids else None
+        any_doc_ids_str = []
+        any_doc_ids_int = []
+        if req.doc_ids:
+            for d in req.doc_ids:
+                any_doc_ids_str.append(str(d))
+                if isinstance(d, str) and d.isdigit():
+                    any_doc_ids_int.append(int(d))
+
+        print(f"[DEBUG] any_doc_ids_str: {any_doc_ids_str}")
+        print(f"[DEBUG] any_doc_ids_int: {any_doc_ids_int}")
+
+        filter_ = None
+        if req.doc_ids:
+            conditions = []
+            if any_doc_ids_str:
+                conditions.append(models.FieldCondition(key="doc_id", match=models.MatchAny(any=any_doc_ids_str)))
+            if any_doc_ids_int:
+                conditions.append(models.FieldCondition(key="doc_id", match=models.MatchAny(any=any_doc_ids_int)))
+            
+            filter_ = models.Filter(should=conditions)
+            print(f"[DEBUG] Filter constructed with {len(conditions)} conditions")
+        else:
+            print(f"[DEBUG] WARNING: No doc_ids provided, no filter applied!")
 
         search_result = client.query_points(
             collection_name=collection_name,
@@ -62,6 +81,8 @@ def chat_with_pdf(req: QueryRequest):
             limit=8,
         )
 
+        print(f"[DEBUG] Qdrant returned {len(search_result.points)} results")
+
         # Build numbered context blocks so the model can cite [1], [2], ...
         context_blocks = []
         citations = []
@@ -69,6 +90,9 @@ def chat_with_pdf(req: QueryRequest):
         for idx, hit in enumerate(search_result.points, start=1):
             payload = hit.payload or {}
             text = payload.get("text", "")
+            score = getattr(hit, "score", None)
+            
+            print(f"[DEBUG]   Hit #{idx}: score={score}, doc_id={payload.get('doc_id')}, text[:80]={text[:80]}")
 
             context_blocks.append(
                 f"[{idx}] (file={payload.get('filename')}, page={payload.get('page')}, chunk={payload.get('chunk_id')})\n{text}"
@@ -76,7 +100,7 @@ def chat_with_pdf(req: QueryRequest):
 
             citations.append({
                 "idx": idx,
-                "score": getattr(hit, "score", None),
+                "score": score,
                 "doc_id": payload.get("doc_id"),
                 "filename": payload.get("filename"),
                 "page": payload.get("page"),
@@ -88,8 +112,10 @@ def chat_with_pdf(req: QueryRequest):
         # IMPORTANT: handle empty retrieval so the LLM can fallback to general knowledge
         if not context_blocks:
             context_text = "No relevant documents found."
+            print(f"[DEBUG] WARNING: No context blocks! Retrieval returned empty results.")
         else:
             context_text = "\n\n".join(context_blocks)
+            print(f"[DEBUG] Context text length: {len(context_text)} chars")
 
         prompt_messages = [
             {
@@ -113,12 +139,18 @@ CONTEXT:
         # Append the current prompt
         prompt_messages.append({"role": "user", "content": req.question})
 
+        print(f"[DEBUG] Sending {len(prompt_messages)} messages to LLM")
+        print(f"[DEBUG] System prompt length: {len(prompt_messages[0]['content'])} chars")
+
         chat_completion = groq_client.chat.completions.create(
             messages=prompt_messages,
             model="llama-3.3-70b-versatile",
         )
 
         final_answer = chat_completion.choices[0].message.content
+        print(f"[DEBUG] LLM response length: {len(final_answer)} chars")
+        print(f"[DEBUG] LLM response preview: {final_answer[:200]}")
+        print(f"{'='*60}\n")
 
         return {
             "answer": final_answer,
@@ -129,6 +161,8 @@ CONTEXT:
 
     except Exception as e:
         print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         return {"error": str(e)}
 
 @app.delete("/document/{doc_id}")
@@ -153,3 +187,39 @@ def delete_document(doc_id: str):
         print(f"ERROR deleting document {doc_id}: {e}")
         return {"error": str(e)}
 
+@app.get("/status/{doc_id}")
+def check_document_status(doc_id: str):
+    """Check if a document has been processed and indexed in Qdrant."""
+    try:
+        results, _ = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="doc_id",
+                        match=models.MatchValue(value=doc_id),
+                    )
+                ]
+            ),
+            limit=1,
+            with_payload=True,
+            with_vectors=False,
+        )
+        
+        if results:
+            return {
+                "status": "ready",
+                "doc_id": doc_id,
+                "filename": results[0].payload.get("filename", ""),
+            }
+        else:
+            return {
+                "status": "processing",
+                "doc_id": doc_id,
+            }
+    except Exception as e:
+        print(f"ERROR checking status for {doc_id}: {e}")
+        return {
+            "status": "processing",
+            "doc_id": doc_id,
+        }

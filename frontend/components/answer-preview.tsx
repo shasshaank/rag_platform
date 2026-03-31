@@ -15,6 +15,9 @@ interface AnswerCardProps {
 
 function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps) {
   const [selectedSource, setSelectedSource] = useState<any | null>(null);
+  const [isLiked, setIsLiked] = useState<boolean | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <article className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -62,16 +65,18 @@ function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps)
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 px-2 text-muted-foreground hover:text-foreground"
+            className={`h-8 px-2 hover:text-foreground ${isLiked === true ? 'text-primary' : 'text-muted-foreground'}`}
             aria-label="Mark as helpful"
+            onClick={() => setIsLiked(true)}
           >
             <ThumbsUp className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 px-2 text-muted-foreground hover:text-foreground"
+            className={`h-8 px-2 hover:text-foreground ${isLiked === false ? 'text-destructive' : 'text-muted-foreground'}`}
             aria-label="Mark as not helpful"
+            onClick={() => setIsLiked(false)}
           >
             <ThumbsDown className="h-3.5 w-3.5" />
           </Button>
@@ -81,14 +86,20 @@ function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps)
             variant="ghost"
             size="sm"
             className="h-8 px-2 text-muted-foreground hover:text-foreground gap-1.5"
+            onClick={() => {
+              navigator.clipboard.writeText(answer);
+              setIsCopied(true);
+              setTimeout(() => setIsCopied(false), 2000);
+            }}
           >
             <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="text-xs">Copy</span>
+            <span className="text-xs">{isCopied ? "Copied!" : "Copy"}</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="h-8 px-2 text-muted-foreground hover:text-foreground gap-1.5"
+            onClick={() => setIsExpanded(true)}
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="text-xs">Expand</span>
@@ -107,6 +118,20 @@ function AnswerCard({ query, answer, sources = [], timestamp }: AnswerCardProps)
           </DialogHeader>
           <div className="mt-4 rounded-md bg-muted/50 p-4 text-sm leading-relaxed text-foreground whitespace-pre-wrap border font-serif">
             {selectedSource?.text || selectedSource?.text_preview || "No text available."}
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto w-[90vw] sm:w-full">
+          <DialogHeader>
+            <DialogTitle>Answer Detail</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold mb-2">Query</h4>
+            <p className="text-sm bg-muted/30 border border-border p-3 rounded-md mb-4">{query}</p>
+            <h4 className="text-sm font-semibold mb-2">Answer</h4>
+            <div className="text-sm leading-relaxed text-foreground whitespace-pre-wrap bg-muted/10 p-4 rounded-md border border-border">{answer}</div>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Upload, FileText, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
+import { useRef, useState, useCallback } from "react";
+import { Upload, FileText, CheckCircle2, AlertCircle, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getPublicEnv } from "@/lib/env";
@@ -9,17 +9,52 @@ import { getPublicEnv } from "@/lib/env";
 type Props = {
   documents: { id: string; name: string }[];
   selectedDocIds: string[];
+  processingDocIds: Set<string>;
   onDocUploaded: (docId: string, filename: string) => void;
   onToggleSelection: (docId: string) => void;
   onDocDeleted: (docId: string) => void;
+  markProcessing: (docId: string) => void;
+  markReady: (docId: string) => void;
 };
 
-export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggleSelection, onDocDeleted }: Props) {
+export function UploadPanel({ documents, selectedDocIds, processingDocIds, onDocUploaded, onToggleSelection, onDocDeleted, markProcessing, markReady }: Props) {
   const { gateway, chatApi } = getPublicEnv();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const pollForReady = useCallback(async (docId: string) => {
+    if (!chatApi) return;
+    
+    const maxAttempts = 60; // Poll for up to 2 minutes (60 * 2s)
+    let attempts = 0;
+    
+    const poll = async () => {
+      attempts++;
+      try {
+        const res = await fetch(`${chatApi}/status/${docId}`);
+        const data = await res.json();
+        
+        if (data.status === "ready") {
+          markReady(docId);
+          return;
+        }
+      } catch (e) {
+        console.error("Status poll error:", e);
+      }
+      
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 2000); // Poll every 2 seconds
+      } else {
+        // Give up after max attempts, mark as ready anyway to not block forever
+        markReady(docId);
+      }
+    };
+    
+    // Start polling after a short delay (give worker time to pick up the job)
+    setTimeout(poll, 1500);
+  }, [chatApi, markReady]);
 
   const uploadFile = async (file: File) => {
     if (!gateway) {
@@ -40,7 +75,9 @@ export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggle
       const data = await res.json().catch(() => null);
 
       if (res.ok && data?.job_id) {
+        markProcessing(data.job_id);
         onDocUploaded(data.job_id, file.name);
+        pollForReady(data.job_id);
       } else {
         alert(`Failed to upload file.${data?.error ? ` ${data.error}` : ""}`);
       }
@@ -136,6 +173,7 @@ export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggle
           <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
             {documents.map((doc) => {
               const checked = selectedDocIds.includes(doc.id);
+              const isProcessing = processingDocIds.has(doc.id);
               return (
                 <div key={doc.id} className="group relative flex items-start gap-3 rounded-lg bg-muted/40 px-3 py-2.5 pr-10 hover:bg-muted/60 transition-colors">
                   <Checkbox 
@@ -143,12 +181,26 @@ export function UploadPanel({ documents, selectedDocIds, onDocUploaded, onToggle
                     checked={checked} 
                     onCheckedChange={() => onToggleSelection(doc.id)}
                     className="mt-0.5 w-4 h-4"
+                    disabled={isProcessing}
                   />
                   <div className="min-w-0 flex-1">
                     <label htmlFor={`doc-${doc.id}`} className="truncate text-sm font-medium text-foreground leading-none mb-1 cursor-pointer select-none line-clamp-1 block">
                       {doc.name}
                     </label>
-                    <p className="text-xs text-muted-foreground font-mono truncate">{doc.id}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground font-mono truncate">{doc.id}</p>
+                      {isProcessing ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-500 font-medium whitespace-nowrap">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Indexing...
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-green-500 font-medium whitespace-nowrap">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Ready
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Button
                     variant="ghost"
