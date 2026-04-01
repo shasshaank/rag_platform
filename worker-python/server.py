@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -6,6 +6,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from groq import Groq
 import os
 import re
+import jwt
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,6 +27,7 @@ api_key=os.getenv("API_KEY")
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 collection_name = os.getenv("QDRANT_COLLECTION", "pdf_collection")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
 client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 
@@ -34,6 +36,27 @@ groq_client = Groq(api_key=api_key)
 print("Loading embedding model...")
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 print("Model loaded!")
+
+def get_user_from_token(request: Request) -> str | None:
+    """Extract and verify Supabase JWT from Authorization header."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header[7:]
+    try:
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        return payload.get("sub")  # sub = user_id
+    except jwt.ExpiredSignatureError:
+        print("[AUTH] Token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        print(f"[AUTH] Invalid token: {e}")
+        return None
 
 class QueryRequest(BaseModel):
     question: str

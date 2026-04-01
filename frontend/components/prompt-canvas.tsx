@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Send, Wand2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPublicEnv } from "@/lib/env";
+import { createClient } from "@/lib/supabase/client";
 import type { Message } from "@/lib/types";
 
 type Props = {
@@ -58,9 +59,17 @@ export function PromptCanvas({ selectedDocIds, messages, onAnswered, hasProcessi
 
       const chatHistory = messages.map(m => ({ role: m.role, content: m.content }));
 
+      // Get auth token for the API request
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
       const res = await fetch(`${chatApi}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ question: userText, doc_ids: selectedDocIds, chat_history: chatHistory }),
       });
 
