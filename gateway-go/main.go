@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,7 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/streadway/amqp"
 )
 
@@ -25,6 +30,9 @@ type JobMessage struct {
 }
 
 func main() {
+	// Try loading .env from parent directory
+	_ = godotenv.Load("../.env")
+
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		rabbitURL = "amqp://guest:guest@localhost:5672/"
@@ -48,6 +56,15 @@ func main() {
 	)
 	failOnError(err, "Failed to declare a queue")
 
+	// AWS S3 Initialization
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	failOnError(err, "Failed to load AWS configuration")
+	s3Client := s3.NewFromConfig(cfg)
+	bucketName := os.Getenv("AWS_S3_BUCKET")
+	if bucketName == "" {
+		log.Println("WARNING: AWS_S3_BUCKET is not set. File uploads to S3 will fail.")
+	}
+
 	r := gin.Default()
 
 	r.Use(func(c *gin.Context) {
@@ -62,11 +79,6 @@ func main() {
 		c.Next()
 	})
 
-	uploadPath := "./temp-uploads"
-	if _, err := os.Stat(uploadPath); os.IsNotExist(err) {
-		os.Mkdir(uploadPath, os.ModePerm)
-	}
-
 	r.POST("/upload", func(c *gin.Context) {
 		file, err := c.FormFile("file")
 		if err != nil {
@@ -76,26 +88,51 @@ func main() {
 
 		jobID := fmt.Sprintf("%d", time.Now().Unix())
 		filename := jobID + "_" + filepath.Base(file.Filename)
-		fullPath := filepath.Join(uploadPath, filename)
+		s3Key := "uploads/" + filename
 
-		if err := c.SaveUploadedFile(file, fullPath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		// Open uploaded file
+		src, err := file.Open()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open uploaded file"})
+			return
+		}
+		defer src.Close()
+
+		// Stream directly to S3
+		_, err = s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(s3Key),
+			Body:   src,
+		})
+		if err != nil {
+			log.Printf("S3 Upload Error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload file to Cloud Storage"})
 			return
 		}
 
-		absPath, _ := filepath.Abs(fullPath)
+		// Use an s3:// URI as the file path
+		s3Path := fmt.Sprintf("s3://%s/%s", bucketName, s3Key)
+
 		messageBody := JobMessage{
-			FilePath: absPath,
+			FilePath: s3Path,
 			JobID:    jobID,
 		}
 
 		body, err := json.Marshal(messageBody)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create job"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize job message"})
 			return
 		}
 
-		err = ch.Publish(
+		// Re-obtain channel just in case of stale connections
+		publishCh, err := conn.Channel()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open RabbitMQ channel"})
+			return
+		}
+		defer publishCh.Close()
+
+		err = publishCh.Publish(
 			"",
 			q.Name,
 			false,
@@ -111,12 +148,12 @@ func main() {
 			return
 		}
 
-		log.Printf(" [x] Sent Job: %s", body)
+		log.Printf(" [x] Sent Job to Queue via S3: %s", s3Path)
 
 		c.JSON(http.StatusAccepted, gin.H{
 			"status":  "queued",
 			"job_id":  jobID,
-			"message": "File uploaded and processing started.",
+			"message": "File uploaded to AWS S3 and processing started.",
 		})
 	})
 
