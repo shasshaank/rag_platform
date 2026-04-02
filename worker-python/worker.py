@@ -5,6 +5,8 @@ import time
 import os
 import uuid
 import traceback
+import boto3
+from urllib.parse import urlparse
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from langchain_community.document_loaders import PyPDFLoader
@@ -17,6 +19,8 @@ QUEUE_NAME = os.getenv("RAG_QUEUE_NAME", "rag_jobs")
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "pdf_collection")
+
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 print(" [i] Loading AI model... (This happens once)")
@@ -34,37 +38,70 @@ def ensure_collection_exists():
     )
     print(f"     -> Created Collection: {COLLECTION_NAME} ")
 
+def download_from_s3(s3_uri: str, local_path: str):
+    print(f" [S3] Downloading {s3_uri} to {local_path}...")
+    s3_client = boto3.client('s3', region_name=AWS_REGION)
+    parsed = urlparse(s3_uri)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip('/')
+    s3_client.download_file(bucket, key, local_path)
+    print(" [S3] Download complete.")
+
 def process_pdf(file_path: str, job_id: str) -> str:
     print(f" [O] Processing file: {file_path}")
+    
+    local_path = file_path
+    is_s3 = file_path.startswith("s3://")
+    
+    if is_s3:
+        filename = os.path.basename(file_path)
+        os.makedirs("temp-downloads", exist_ok=True)
+        local_path = os.path.join("temp-downloads", filename)
+        download_from_s3(file_path, local_path)
 
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File not found at {file_path}")
+    if not os.path.exists(local_path):
+        raise FileNotFoundError(f"File not found at {local_path}")
 
     ensure_collection_exists()
 
     doc_id = job_id
     filename = os.path.basename(file_path)
 
-    loader = PyPDFLoader(file_path)
-    pages = loader.load()
+    loader = PyPDFLoader(local_path)
+    try:
+        pages = loader.load()
+    except Exception as e:
+        if is_s3 and os.path.exists(local_path):
+            os.remove(local_path)
+        raise e
+
     print(f"     -> Loaded {len(pages)} pages")
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     chunks = text_splitter.split_documents(pages)
     print(f"     -> Split into {len(chunks)} text chunks")
 
+    # Filter out empty chunks to avoid embedding crashes
+    valid_chunks = []
+    texts_to_embed = []
+    for chunk in chunks:
+        text = str(chunk.page_content).strip() if chunk.page_content else ""
+        if text:
+            valid_chunks.append((chunk, text))
+            texts_to_embed.append(text)
+
+    if not texts_to_embed:
+        if is_s3 and os.path.exists(local_path):
+            os.remove(local_path)
+        raise ValueError(f"No readable text found in {local_path}. Cannot store in database.")
+
+    print(f"     -> Batch embedding {len(texts_to_embed)} chunks... (This will be much faster!)")
+    # Batch embed ALL chunks at once (massively speeds up processing)
+    vectors = embed_model.embed_documents(texts_to_embed)
+
     points = []
-    for i, chunk in enumerate(chunks):
-        text = chunk.page_content if chunk.page_content else ""
-        if not isinstance(text, str):
-            text = str(text)
-        text = text.strip()
-        
-        if not text:
-            continue  # Skip empty chunks to avoid embedding errors
-
-        vector = embed_model.embed_query(text)
-
+    for i, (chunk_tup, vector) in enumerate(zip(valid_chunks, vectors)):
+        chunk, text = chunk_tup
         payload = {
             "text": text,
             "source": file_path,
@@ -82,9 +119,6 @@ def process_pdf(file_path: str, job_id: str) -> str:
             )
         )
 
-    if not points:
-        raise ValueError(f"No readable text found in {file_path}. Cannot store in database.")
-
     batch_size = 100
     for i in range(0, len(points), batch_size):
         qdrant_client.upsert(
@@ -92,8 +126,12 @@ def process_pdf(file_path: str, job_id: str) -> str:
             points=points[i:i+batch_size]
         )
     print(f" [V] Success! Stored {len(points)} vectors in Qdrant for doc_id={doc_id}.")
+    
+    if is_s3 and os.path.exists(local_path):
+        os.remove(local_path)
+        print(f"     -> Cleaned up temporary file {local_path}")
+        
     return doc_id
-
 
 
 def connect_to_rabbitmq():

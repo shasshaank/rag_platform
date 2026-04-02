@@ -102,7 +102,7 @@ def chat_with_pdf(req: QueryRequest):
             collection_name=collection_name,
             query=vector_math,
             query_filter=filter_,
-            limit=8,
+            limit=15,
         )
 
         print(f"[DEBUG] Qdrant returned {len(search_result.points)} results")
@@ -148,9 +148,9 @@ def chat_with_pdf(req: QueryRequest):
 You are an intelligent assistant. You have been provided with CONTEXT retrieved from the user's uploaded documents.
 
 RULES:
-1. If the CONTEXT contains information relevant to the user's question, answer USING ONLY that information and cite your sources like [1], [2], etc.
+1. You MUST prioritize answering from the CONTEXT above all else. Even if the context fragments are messy (as is common with academic PDFs), extract whatever concepts you can find to answer the user's query and cite your sources like [1], [2].
 2. NOTE: The filename, page number, and chunk metadata provided in the parentheses (e.g., (file=...)) ALSO count as valid CONTEXT. You may use the filename to infer the title, author, or subject of the document to answer the user's question.
-3. If the CONTEXT (including the metadata/filename) does NOT contain relevant information, or if no CONTEXT is provided, you MAY answer from your general knowledge BUT you MUST start your response with exactly this line:
+3. If the CONTEXT (including the metadata/filename) is completely empty or 100% irrelevant to the topic, ONLY THEN may you answer from your general knowledge. If you do this, you MUST start your response with exactly this line:
    "⚠️ This answer is based on general knowledge, not your uploaded documents."
    Then provide your answer below that disclaimer.
 4. Do NOT mix document citations with general knowledge. Either cite documents OR give the disclaimer — never both.
